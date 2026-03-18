@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "api_key": "API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key",
+      "cannot_connect": "Failed to connect",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This Ninebot account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "poll_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "estimated_range": {
+        "name": "Estimated range"
+      },
+      "remaining_charge_time": {
+        "name": "Remaining charge time"
+      },
+      "location_description": {
+        "name": "Location description"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Charging"
+      },
+      "power": {
+        "name": "Power"
+      }
+    }
+  }
+}
