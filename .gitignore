@@ -1,0 +1,21 @@
+# artifacts
+__pycache__
+.pytest*
+*.egg-info
+*/build/*
+*/dist/*
+
+# misc
+.env
+.claude
+.coverage
+.python-version
+.venv
+.idea
+.vscode
+.DS_Store
+coverage.xml
+htmlcov
+outputdata
+settings.json
+venv
