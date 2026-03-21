@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "username": "账号",
+          "password": "密码"
+        },
+        "data_description": {
+          "username": "用户名 / 手机 / 邮箱"
+        }
+      },
+      "reconfigure": {
+        "data": {
+          "username": "账号",
+          "password": "密码"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "用户名或密码错误",
+      "cannot_connect": "连接失败",
+      "unknown": "未知错误"
+    },
+    "abort": {
+      "already_configured": "该账户已经配置过"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "poll_interval": "轮训间隔(秒)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "电量"
+      },
+      "endurance": {
+        "name": "续航"
+      },
+      "location": {
+        "name": "位置"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "充电中"
+      },
+      "power": {
+        "name": "已开机"
+      }
+    }
+  }
+}

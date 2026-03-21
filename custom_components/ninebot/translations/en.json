@@ -3,12 +3,22 @@
     "step": {
       "user": {
         "data": {
-          "api_key": "API key"
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Username / Phone / Email"
+        }
+      },
+      "reconfigure": {
+        "data": {
+          "username": "Username",
+          "password": "Password"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid API key",
+      "invalid_auth": "Invalid username or password",
       "cannot_connect": "Failed to connect",
       "unknown": "Unexpected error"
     },
@@ -30,14 +40,11 @@
       "battery": {
         "name": "Battery"
       },
-      "estimated_range": {
-        "name": "Estimated range"
+      "endurance": {
+        "name": "Endurance"
       },
-      "remaining_charge_time": {
-        "name": "Remaining charge time"
-      },
-      "location_description": {
-        "name": "Location description"
+      "location": {
+        "name": "Location"
       }
     },
     "binary_sensor": {

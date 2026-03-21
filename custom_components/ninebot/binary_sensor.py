@@ -19,21 +19,23 @@ from .entity import NinebotEntity
 
 @dataclass(frozen=True, kw_only=True)
 class NinebotBinarySensorEntityDescription(BinarySensorEntityDescription):
-    value_fn: Callable[[dict[str, Any]], bool | None]
+    value_fn: Callable
+    attrs_fn: Callable | None = None
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[NinebotBinarySensorEntityDescription, ...] = (
     NinebotBinarySensorEntityDescription(
         key="charging",
-        translation_key="charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda dynamic: _coerce_bool(dynamic.get("chargingState"), on_value=1),
+        value_fn=lambda entity: _coerce_bool(entity.device_dynamic.get("chargingState"), on_value=1),
+        attrs_fn=lambda entity: {
+            "remaining_charge_time": entity.device_dynamic.get("remainChargeTime"),
+        },
     ),
     NinebotBinarySensorEntityDescription(
         key="power",
-        translation_key="power",
         device_class=BinarySensorDeviceClass.POWER,
-        value_fn=lambda dynamic: _coerce_bool(dynamic.get("powerStatus"), on_value=1),
+        value_fn=lambda entity: _coerce_bool(entity.device_dynamic.get("powerStatus"), on_value=1),
     ),
 )
 
@@ -78,22 +80,13 @@ class NinebotBinarySensor(NinebotEntity, BinarySensorEntity):
         sn: str,
         description: NinebotBinarySensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, config_entry, sn)
         self.entity_description = description
-        self._attr_unique_id = f"{sn}_{description.key}"
+        super().__init__(coordinator, config_entry, sn)
 
-    @property
-    def is_on(self) -> bool | None:
-        return self.entity_description.value_fn(self.device_dynamic_payload)
-
-    @property
-    def name(self) -> str | None:
-        return self.entity_description.name
-
-    @property
-    def suggested_object_id(self) -> str:
-        return f"{self.device_name}_{self.entity_description.key}"
-
+    @callback
+    def _on_updated(self) -> None:
+        """Handle updated data."""
+        self._attr_is_on = self.entity_description.value_fn(self)
 
 def _coerce_bool(value: Any, *, on_value: int) -> bool | None:
     if value is None:

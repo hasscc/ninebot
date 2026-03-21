@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfLength
+from homeassistant.const import PERCENTAGE, UnitOfLength
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -19,8 +19,8 @@ from . import NinebotConfigEntry
 from .entity import NinebotEntity
 
 
-def _location_description(dynamic: dict[str, Any]) -> str | None:
-    location_info = dynamic.get("locationInfo")
+def _location_description(entity: NinebotEntity) -> str | None:
+    location_info = entity.device_dynamic.get("locationInfo")
     if not isinstance(location_info, dict):
         return None
 
@@ -30,39 +30,33 @@ def _location_description(dynamic: dict[str, Any]) -> str | None:
 
 @dataclass(frozen=True, kw_only=True)
 class NinebotSensorEntityDescription(SensorEntityDescription):
-    value_fn: Callable[[dict[str, Any]], Any]
+    value_fn: Callable
+    attrs_fn: Callable | None = None
 
 
 SENSOR_DESCRIPTIONS: tuple[NinebotSensorEntityDescription, ...] = (
     NinebotSensorEntityDescription(
         key="battery",
-        translation_key="battery",
         device_class=SensorDeviceClass.BATTERY,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda dynamic: dynamic.get("dumpEnergy"),
+        value_fn=lambda entity: entity.device_dynamic.get("dumpEnergy"),
     ),
     NinebotSensorEntityDescription(
-        key="estimated_range",
-        translation_key="estimated_range",
+        key="endurance",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
-        value_fn=lambda dynamic: dynamic.get("estimateMileage"),
+        value_fn=lambda entity: entity.device_dynamic.get("estimateMileage"),
     ),
     NinebotSensorEntityDescription(
-        key="remaining_charge_time",
-        translation_key="remaining_charge_time",
-        icon="mdi:battery-clock",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda dynamic: dynamic.get("remainChargeTime"),
-    ),
-    NinebotSensorEntityDescription(
-        key="location_description",
-        translation_key="location_description",
+        key="location",
         icon="mdi:map-marker",
         value_fn=_location_description,
+        attrs_fn=lambda entity: {
+            "entity_picture": img,
+        } if (img := entity.device_profile.get("img")) else {},
     ),
 )
 
@@ -107,18 +101,10 @@ class NinebotSensor(NinebotEntity, SensorEntity):
         sn: str,
         description: NinebotSensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, config_entry, sn)
         self.entity_description = description
-        self._attr_unique_id = f"{sn}_{description.key}"
+        super().__init__(coordinator, config_entry, sn)
 
-    @property
-    def native_value(self) -> Any:
-        return self.entity_description.value_fn(self.device_dynamic_payload)
-
-    @property
-    def name(self) -> str | None:
-        return self.entity_description.name
-
-    @property
-    def suggested_object_id(self) -> str:
-        return f"{self.device_name}_{self.entity_description.key}"
+    @callback
+    def _on_updated(self) -> None:
+        """Handle updated data."""
+        self._attr_native_value = self.entity_description.value_fn(self)
