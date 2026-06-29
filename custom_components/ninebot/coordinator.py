@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 from typing import Any
@@ -13,9 +14,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import NinebotApiAuthError, NinebotApiConnectionError, NinebotCliClient
 from .const import (
     CONF_AMAP_API_KEY,
+    CONF_DEVICE_DELAY,
     CONF_KEEP_LAST_DATA_ON_ERROR,
     CONF_POLL_INTERVAL,
+    CONF_REQUEST_DELAY,
+    DEFAULT_DEVICE_DELAY,
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_REQUEST_DELAY,
     DOMAIN,
 )
 from .geocode import (
@@ -44,6 +49,16 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._address_cache: dict[str, tuple[float, float, dict[str, Any]]] = {}
         self._keep_last_data_on_error = bool(
             entry.options.get(CONF_KEEP_LAST_DATA_ON_ERROR, False)
+        )
+        self._request_delay = _entry_delay(
+            entry,
+            CONF_REQUEST_DELAY,
+            DEFAULT_REQUEST_DELAY,
+        )
+        self._device_delay = _entry_delay(
+            entry,
+            CONF_DEVICE_DELAY,
+            DEFAULT_DEVICE_DELAY,
         )
         amap_api_key = _entry_amap_api_key(entry)
         self._amap_geocoder = (
@@ -80,16 +95,20 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_get_device_payloads(self) -> list[dict[str, Any]]:
         devices = await self._client.async_get_device_list()
+        await self._async_request_delay()
         previous_devices = self._previous_devices
         results: list[dict[str, Any]] = []
 
-        for device in devices:
+        for index, device in enumerate(devices):
             sn = device.get("sn")
             if not isinstance(sn, str) or not sn:
                 continue
 
+            if index > 0:
+                await self._async_device_delay()
+
             try:
-                state = await self._client.async_get_device_state(sn)
+                state = await self._async_get_device_state(sn)
             except NinebotApiConnectionError as err:
                 previous_payload = previous_devices.get(sn)
                 if self._keep_last_data_on_error and isinstance(previous_payload, dict):
@@ -109,6 +128,28 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             })
 
         return results
+
+    async def _async_get_device_state(self, sn: str) -> dict[str, Any]:
+        status = await self._client.async_get_device_status(sn)
+        await self._async_request_delay()
+
+        state = self._client.normalize_status(status)
+        try:
+            travel = await self._client.async_get_device_travel(sn)
+        except NinebotApiConnectionError as err:
+            LOGGER.debug("Failed to fetch Ninebot travel data for %s: %s", sn, err)
+        else:
+            if isinstance(travel, dict):
+                state.update(self._client.normalize_travel(travel))
+        return state
+
+    async def _async_request_delay(self) -> None:
+        if self._request_delay > 0:
+            await asyncio.sleep(self._request_delay)
+
+    async def _async_device_delay(self) -> None:
+        if self._device_delay > 0:
+            await asyncio.sleep(self._device_delay)
 
     async def _async_update_addresses(self, payloads: list[dict[str, Any]]) -> None:
         for payload in payloads:
@@ -165,3 +206,10 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 def _entry_amap_api_key(entry: ConfigEntry) -> str:
     value = entry.options.get(CONF_AMAP_API_KEY, entry.data.get(CONF_AMAP_API_KEY, ""))
     return value.strip() if isinstance(value, str) else ""
+
+
+def _entry_delay(entry: ConfigEntry, key: str, default: int) -> int:
+    try:
+        return max(0, int(entry.options.get(key, default)))
+    except (TypeError, ValueError):
+        return default

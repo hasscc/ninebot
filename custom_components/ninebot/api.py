@@ -52,22 +52,30 @@ class NinebotCliClient:
         ]
 
     async def async_get_device_state(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
-        month = month or datetime.now(UTC).strftime("%Y%m")
-        status = await self._async_run_json_command(["status", sn, "--json"])
+        status = await self.async_get_device_status(sn)
         if not isinstance(status, dict):
             status = {}
 
-        state = self._normalize_status(status)
+        state = self.normalize_status(status)
         try:
-            travel = await self._async_run_json_command(
-                ["travel", sn, "--month", month, "--json"]
-            )
+            travel = await self.async_get_device_travel(sn, month=month)
         except NinebotApiConnectionError as err:
             LOGGER.debug("Failed to fetch Ninebot travel data for %s: %s", sn, err)
         else:
             if isinstance(travel, dict):
-                state.update(self._normalize_travel(travel))
+                state.update(self.normalize_travel(travel))
         return state
+
+    async def async_get_device_status(self, sn: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(["status", sn, "--json"])
+        return payload if isinstance(payload, dict) else {}
+
+    async def async_get_device_travel(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
+        month = month or datetime.now(UTC).strftime("%Y%m")
+        payload = await self._async_run_json_command(
+            ["travel", sn, "--month", month, "--json"]
+        )
+        return payload if isinstance(payload, dict) else {}
 
     async def async_get_all_device_payloads(self) -> list[dict[str, Any]]:
         async with self._cycle_lock:
@@ -162,7 +170,7 @@ class NinebotCliClient:
         }
 
     @staticmethod
-    def _normalize_status(status: dict[str, Any]) -> dict[str, Any]:
+    def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         state: dict[str, Any] = {"raw": status}
 
         if "dump_energy" in status:
@@ -193,7 +201,7 @@ class NinebotCliClient:
         return state
 
     @staticmethod
-    def _normalize_travel(travel: dict[str, Any]) -> dict[str, Any]:
+    def normalize_travel(travel: dict[str, Any]) -> dict[str, Any]:
         rides = travel.get("list")
         if not isinstance(rides, list):
             rides = []

@@ -38,11 +38,15 @@
         "data": {
           "poll_interval": "Polling interval (seconds)",
           "amap_api_key": "AMap Web Service API Key",
-          "keep_last_data_on_error": "Keep last data when updates fail"
+          "keep_last_data_on_error": "Keep last data when updates fail",
+          "request_delay": "Request delay (seconds)",
+          "device_delay": "Device delay (seconds)"
         },
         "data_description": {
           "amap_api_key": "Optional. When set, the integration creates an address entity using AMap reverse geocoding.",
-          "keep_last_data_on_error": "Optional. When enabled, entities keep the last successful data if the Ninebot API update fails because of network or service errors. Authentication failures still trigger re-authentication."
+          "keep_last_data_on_error": "Optional. When enabled, entities keep the last successful data if the Ninebot API update fails because of network or service errors. Authentication failures still trigger re-authentication.",
+          "request_delay": "Seconds to wait between Ninebot API requests. Defaults to 0 seconds to keep the existing behavior.",
+          "device_delay": "Seconds to wait between different vehicles. Defaults to 0 seconds to keep the existing behavior."
         }
       }
     }

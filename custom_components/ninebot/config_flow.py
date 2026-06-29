@@ -14,11 +14,15 @@ from .api import NinebotApiAuthError, NinebotApiConnectionError, NinebotCliClien
 from .const import (
     CONF_AMAP_API_KEY,
     CONF_BUSINESS_UID,
+    CONF_DEVICE_DELAY,
     CONF_KEEP_LAST_DATA_ON_ERROR,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
+    CONF_REQUEST_DELAY,
     CONF_USERNAME,
+    DEFAULT_DEVICE_DELAY,
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_REQUEST_DELAY,
     DOMAIN,
     NINEBOT_STORAGE_DIR,
 )
@@ -229,6 +233,14 @@ class OptionsFlow(config_entries.OptionsFlow):
             CONF_KEEP_LAST_DATA_ON_ERROR,
             False,
         )
+        request_delay = self._config_entry.options.get(
+            CONF_REQUEST_DELAY,
+            DEFAULT_REQUEST_DELAY,
+        )
+        device_delay = self._config_entry.options.get(
+            CONF_DEVICE_DELAY,
+            DEFAULT_DEVICE_DELAY,
+        )
 
         return self.async_show_form(
             step_id="init",
@@ -243,6 +255,14 @@ class OptionsFlow(config_entries.OptionsFlow):
                         CONF_KEEP_LAST_DATA_ON_ERROR,
                         default=keep_last_data_on_error,
                     ): bool,
+                    vol.Optional(CONF_REQUEST_DELAY, default=request_delay): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=0, max=30),
+                    ),
+                    vol.Optional(CONF_DEVICE_DELAY, default=device_delay): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=0, max=30),
+                    ),
                 }
             ),
         )
