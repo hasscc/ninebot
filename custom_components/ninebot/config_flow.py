@@ -12,6 +12,7 @@ from homeassistant.core import callback
 
 from .api import NinebotApiAuthError, NinebotApiConnectionError, NinebotCliClient
 from .const import (
+    CONF_AMAP_API_KEY,
     CONF_BUSINESS_UID,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
@@ -104,6 +105,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             username = user_input[CONF_USERNAME].strip()
             password = user_input[CONF_PASSWORD]
+            amap_api_key = user_input.get(CONF_AMAP_API_KEY, "").strip()
 
             try:
                 _, business_uid, title, _ = await self._async_validate_credentials(
@@ -125,6 +127,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
                         CONF_BUSINESS_UID: business_uid,
+                        CONF_AMAP_API_KEY: amap_api_key,
                     },
                 )
 
@@ -134,6 +137,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): str,
+                    vol.Optional(CONF_AMAP_API_KEY): str,
                 }
             ),
             errors=errors,
@@ -148,6 +152,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             username = user_input[CONF_USERNAME].strip()
             password = user_input[CONF_PASSWORD]
+            amap_api_key = user_input.get(CONF_AMAP_API_KEY, "").strip()
 
             try:
                 _, business_uid, _, _ = await self._async_validate_credentials(
@@ -170,6 +175,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
                         CONF_BUSINESS_UID: business_uid,
+                        CONF_AMAP_API_KEY: amap_api_key,
                     },
                 )
 
@@ -182,6 +188,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         default=entry.data.get(CONF_USERNAME, ""),
                     ): str,
                     vol.Required(CONF_PASSWORD): str,
+                    vol.Optional(
+                        CONF_AMAP_API_KEY,
+                        default=entry.options.get(
+                            CONF_AMAP_API_KEY,
+                            entry.data.get(CONF_AMAP_API_KEY, ""),
+                        ),
+                    ): str,
                 }
             ),
             errors=errors,
@@ -198,12 +211,19 @@ class OptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
+            user_input[CONF_AMAP_API_KEY] = user_input.get(CONF_AMAP_API_KEY, "").strip()
             return self.async_create_entry(data=user_input)
 
         poll_interval = self._config_entry.options.get(
             CONF_POLL_INTERVAL,
             DEFAULT_POLL_INTERVAL,
         )
+        amap_api_key = self._config_entry.options.get(
+            CONF_AMAP_API_KEY,
+            self._config_entry.data.get(CONF_AMAP_API_KEY, ""),
+        )
+        if not isinstance(amap_api_key, str):
+            amap_api_key = ""
 
         return self.async_show_form(
             step_id="init",
@@ -212,7 +232,8 @@ class OptionsFlow(config_entries.OptionsFlow):
                     vol.Required(CONF_POLL_INTERVAL, default=poll_interval): vol.All(
                         vol.Coerce(int),
                         vol.Range(min=30, max=86400),
-                    )
+                    ),
+                    vol.Optional(CONF_AMAP_API_KEY, default=amap_api_key): str,
                 }
             ),
         )
