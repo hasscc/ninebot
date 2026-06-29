@@ -30,7 +30,7 @@
     "step": {
       "init": {
         "data": {
-          "poll_interval": "轮训间隔(秒)"
+          "poll_interval": "轮询间隔(秒)"
         }
       }
     }
@@ -43,8 +43,17 @@
       "endurance": {
         "name": "续航"
       },
-      "location": {
-        "name": "位置"
+      "month_mileage": {
+        "name": "本月里程"
+      },
+      "last_mileage": {
+        "name": "最后里程"
+      },
+      "month_energy": {
+        "name": "本月耗电"
+      },
+      "last_energy": {
+        "name": "最后耗电"
       }
     },
     "binary_sensor": {
@@ -53,6 +62,14 @@
       },
       "power": {
         "name": "已开机"
+      },
+      "lock": {
+        "name": "锁定状态"
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "位置"
       }
     }
   }

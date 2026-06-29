@@ -19,13 +19,9 @@ from . import NinebotConfigEntry
 from .entity import NinebotEntity
 
 
-def _location_description(entity: NinebotEntity) -> str | None:
-    location_info = entity.device_dynamic.get("locationInfo")
-    if not isinstance(location_info, dict):
-        return None
-
-    location_desc = location_info.get("locationDesc")
-    return str(location_desc) if location_desc is not None else None
+def _last_ride_attributes(entity: NinebotEntity) -> dict[str, Any]:
+    last_ride = entity.device_state.get("last_ride")
+    return last_ride if isinstance(last_ride, dict) else {}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,7 +36,7 @@ SENSOR_DESCRIPTIONS: tuple[NinebotSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.BATTERY,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda entity: entity.device_dynamic.get("dumpEnergy"),
+        value_fn=lambda entity: entity.device_state.get("battery"),
     ),
     NinebotSensorEntityDescription(
         key="endurance",
@@ -48,15 +44,41 @@ SENSOR_DESCRIPTIONS: tuple[NinebotSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
-        value_fn=lambda entity: entity.device_dynamic.get("estimateMileage"),
+        value_fn=lambda entity: entity.device_state.get("endurance"),
     ),
     NinebotSensorEntityDescription(
-        key="location",
-        icon="mdi:map-marker",
-        value_fn=_location_description,
-        attrs_fn=lambda entity: {
-            "entity_picture": img,
-        } if (img := entity.device_profile.get("img")) else {},
+        key="month_mileage",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        value_fn=lambda entity: entity.device_state.get("month_mileage"),
+    ),
+    NinebotSensorEntityDescription(
+        key="last_mileage",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda entity: entity.device_state.get("last_mileage"),
+        attrs_fn=_last_ride_attributes,
+    ),
+    NinebotSensorEntityDescription(
+        key="month_energy",
+        icon="mdi:flash",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        value_fn=lambda entity: entity.device_state.get("month_energy"),
+    ),
+    NinebotSensorEntityDescription(
+        key="last_energy",
+        icon="mdi:flash",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda entity: entity.device_state.get("last_energy"),
+        attrs_fn=_last_ride_attributes,
     ),
 )
 

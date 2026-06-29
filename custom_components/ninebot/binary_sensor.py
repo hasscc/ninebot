@@ -20,22 +20,23 @@ from .entity import NinebotEntity
 @dataclass(frozen=True, kw_only=True)
 class NinebotBinarySensorEntityDescription(BinarySensorEntityDescription):
     value_fn: Callable
-    attrs_fn: Callable | None = None
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[NinebotBinarySensorEntityDescription, ...] = (
     NinebotBinarySensorEntityDescription(
         key="charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda entity: _coerce_bool(entity.device_dynamic.get("chargingState"), on_value=1),
-        attrs_fn=lambda entity: {
-            "remaining_charge_time": entity.device_dynamic.get("remainChargeTime"),
-        },
+        value_fn=lambda entity: _coerce_bool(entity.device_state.get("charging"), on_value=1),
     ),
     NinebotBinarySensorEntityDescription(
         key="power",
         device_class=BinarySensorDeviceClass.POWER,
-        value_fn=lambda entity: _coerce_bool(entity.device_dynamic.get("powerStatus"), on_value=1),
+        value_fn=lambda entity: _coerce_bool(entity.device_state.get("power"), on_value=1),
+    ),
+    NinebotBinarySensorEntityDescription(
+        key="lock",
+        device_class=BinarySensorDeviceClass.LOCK,
+        value_fn=lambda entity: _coerce_bool(entity.device_state.get("lock"), on_value=0),
     ),
 )
 
@@ -87,6 +88,7 @@ class NinebotBinarySensor(NinebotEntity, BinarySensorEntity):
     def _on_updated(self) -> None:
         """Handle updated data."""
         self._attr_is_on = self.entity_description.value_fn(self)
+
 
 def _coerce_bool(value: Any, *, on_value: int) -> bool | None:
     if value is None:

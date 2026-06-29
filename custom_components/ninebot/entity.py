@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urlparse
 
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import NinebotConfigEntry, LOGGER
+from . import LOGGER, NinebotConfigEntry
 from .const import DOMAIN
 from .coordinator import NinebotDataUpdateCoordinator
 
@@ -64,16 +62,15 @@ class NinebotEntity(CoordinatorEntity[NinebotDataUpdateCoordinator]):
     @property
     def device_name(self) -> str:
         info = self.device_profile
-        if name := info.get("deviceName"):
+        if name := info.get("name"):
             return str(name)
         return self._sn
 
     @property
     def device_model(self) -> str:
         info = self.device_profile
-        image_url = info.get("img")
-        if isinstance(image_url, str) and (parsed_model := _model_from_image_url(image_url)):
-            return parsed_model
+        if model := info.get("model"):
+            return str(model)
         return self._sn
 
     @property
@@ -89,22 +86,12 @@ class NinebotEntity(CoordinatorEntity[NinebotDataUpdateCoordinator]):
         return info if isinstance(info, dict) else {}
 
     @property
-    def device_dynamic(self) -> dict[str, Any]:
+    def device_state(self) -> dict[str, Any]:
         payload = self.device_payload or {}
-        dynamic = payload.get("dynamic")
-        return dynamic if isinstance(dynamic, dict) else {}
+        state = payload.get("state")
+        return state if isinstance(state, dict) else {}
 
     @property
     def suggested_entity_id(self) -> str:
         """Return input for object id."""
         return f"{DOMAIN}.{self._sn}_{self.entity_description.key}".lower()
-
-
-def _model_from_image_url(image_url: str) -> str | None:
-    parsed = urlparse(image_url)
-    filename = PurePosixPath(parsed.path).stem
-    if not filename:
-        return None
-
-    model = filename.replace("_", " ").strip()
-    return model or None

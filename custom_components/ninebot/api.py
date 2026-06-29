@@ -1,34 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from http import HTTPStatus
+import asyncio
+from datetime import UTC, datetime
+import json
+import logging
+from pathlib import Path
+import sys
 from typing import Any
 
-from aiohttp import ClientError, ClientResponseError, ClientSession
+from .const import API_TIMEOUT, NINECLI_MODULE
 
-from .const import (
-    API_TIMEOUT,
-    CLIENT_ID,
-    DEFAULT_LANGUAGE,
-    DEVICE_BASE_URL,
-    DEVICE_DYNAMIC_PATH,
-    DEVICE_LIST_PATH,
-    LOGIN_BASE_URL,
-    LOGIN_PATH,
-)
-
-
-type TokenUpdateCallback = Callable[[NinebotTokens], Awaitable[None]]
-
-
-@dataclass(slots=True)
-class NinebotTokens:
-    """Authentication tokens returned by the Ninebot API."""
-
-    access_token: str
-    refresh_token: str
-    access_token_validity: int | None
+LOGGER = logging.getLogger(__package__)
 
 
 class NinebotApiError(Exception):
@@ -43,218 +25,228 @@ class NinebotApiConnectionError(NinebotApiError):
     """Raised when the API request fails."""
 
 
-class NinebotApiClient:
-    """Async client for the Ninebot cloud API."""
+class NinebotCliClient:
+    """Async subprocess client for the ninecli package."""
 
-    def __init__(
-        self,
-        session: ClientSession,
-        username: str,
-        password: str,
-        access_token: str | None = None,
-        refresh_token: str | None = None,
-        access_token_validity: int | None = None,
-        token_update_callback: TokenUpdateCallback | None = None,
-    ) -> None:
-        self._session = session
-        self._username = username
-        self._password = password
-        self._access_token = access_token
-        self._refresh_token = refresh_token
-        self._access_token_validity = access_token_validity
-        self._token_update_callback = token_update_callback
-        self._user_uuid: str | None = None
+    def __init__(self, config_dir: Path) -> None:
+        self._config_dir = config_dir
+        self._command_lock = asyncio.Lock()
+        self._cycle_lock = asyncio.Lock()
 
-    @property
-    def tokens(self) -> NinebotTokens:
-        """Return the current token state."""
-        return NinebotTokens(
-            access_token=self._access_token or "",
-            refresh_token=self._refresh_token or "",
-            access_token_validity=self._access_token_validity,
+    async def async_login(self, username: str, password: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(
+            ["login", "-u", username, "-p", password, "--json"]
         )
-
-    @property
-    def user_uuid(self) -> str | None:
-        """Return the user UUID from the most recent successful login."""
-        return self._user_uuid
-
-    async def async_login(self) -> NinebotTokens:
-        """Authenticate with username and password and store returned tokens."""
-        payload = await self._async_raw_request(
-            "post",
-            LOGIN_BASE_URL,
-            LOGIN_PATH,
-            json={
-                "username": self._username,
-                "password": self._password,
-            },
-        )
-
-        if payload.get("resultCode") != "90000":
-            message = str(payload.get("resultDesc", "Authentication failed"))
-            raise NinebotApiAuthError(message)
-
-        data = payload.get("data")
-        if not isinstance(data, dict):
-            raise NinebotApiConnectionError("Missing login response data")
-
-        user_uuid = data.get("uuid")
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token")
-        access_token_validity = data.get("accessTokenValidity")
-
-        if not isinstance(user_uuid, str) or not user_uuid:
-            raise NinebotApiConnectionError("Missing user UUID in login response")
-        if not isinstance(access_token, str) or not access_token:
-            raise NinebotApiConnectionError("Missing access token in login response")
-        if not isinstance(refresh_token, str):
-            refresh_token = ""
-        if not isinstance(access_token_validity, int):
-            access_token_validity = None
-
-        self._user_uuid = user_uuid
-
-        tokens = NinebotTokens(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            access_token_validity=access_token_validity,
-        )
-        await self._async_set_tokens(tokens)
-        return tokens
+        return payload if isinstance(payload, dict) else {}
 
     async def async_get_device_list(self) -> list[dict[str, Any]]:
-        payload = await self._async_device_request(
-            DEVICE_LIST_PATH,
-            json={},
-        )
-        data = payload.get("data")
-        if isinstance(data, list):
-            return [device for device in data if isinstance(device, dict)]
-        return []
+        payload = await self._async_run_json_command(["vehicles", "--json"])
+        vehicles = payload if isinstance(payload, list) else payload.get("data") if isinstance(payload, dict) else []
+        if not isinstance(vehicles, list):
+            return []
+        return [
+            normalized
+            for vehicle in vehicles
+            if isinstance(vehicle, dict)
+            if (normalized := self._normalize_vehicle(vehicle)) is not None
+        ]
 
-    async def async_get_device_dynamic_info(self, sn: str) -> dict[str, Any]:
-        payload = await self._async_device_request(
-            DEVICE_DYNAMIC_PATH,
-            json={"sn": sn},
-        )
-        data = payload.get("data")
-        if isinstance(data, dict):
-            return data
-        return {}
+    async def async_get_device_state(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
+        month = month or datetime.now(UTC).strftime("%Y%m")
+        status = await self._async_run_json_command(["status", sn, "--json"])
+        if not isinstance(status, dict):
+            status = {}
 
-    async def _async_device_request(self, path: str, json: dict[str, Any]) -> dict[str, Any]:
-        if not self._access_token:
-            await self.async_login()
-
-        request_body = {
-            "lang": DEFAULT_LANGUAGE,
-            "access_token": self._access_token,
-            **json,
-        }
-
+        state = self._normalize_status(status)
         try:
-            return await self._async_raw_request(
-                "post",
-                DEVICE_BASE_URL,
-                path,
-                json=request_body,
+            travel = await self._async_run_json_command(
+                ["travel", sn, "--month", month, "--json"]
             )
-        except NinebotApiAuthError:
-            await self.async_login()
-            retry_body = {
-                "lang": DEFAULT_LANGUAGE,
-                "access_token": self._access_token,
-                **json,
-            }
+        except NinebotApiConnectionError as err:
+            LOGGER.debug("Failed to fetch Ninebot travel data for %s: %s", sn, err)
+        else:
+            if isinstance(travel, dict):
+                state.update(self._normalize_travel(travel))
+        return state
+
+    async def async_get_all_device_payloads(self) -> list[dict[str, Any]]:
+        async with self._cycle_lock:
+            devices = await self.async_get_device_list()
+            results: list[dict[str, Any]] = []
+            for device in devices:
+                sn = device.get("sn")
+                if not isinstance(sn, str) or not sn:
+                    continue
+                state = await self.async_get_device_state(sn)
+                results.append({
+                    "sn": sn,
+                    "info": device,
+                    "state": state,
+                })
+            return results
+
+    async def _async_run_json_command(self, args: list[str]) -> Any:
+        command = [
+            sys.executable,
+            "-m",
+            NINECLI_MODULE,
+            "--config",
+            str(self._config_dir),
+            *args,
+        ]
+        async with self._command_lock:
             try:
-                return await self._async_raw_request(
-                    "post",
-                    DEVICE_BASE_URL,
-                    path,
-                    json=retry_body,
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
-            except NinebotApiAuthError as err:
-                raise NinebotApiAuthError(str(err) or "Authentication failed") from err
+            except OSError as err:
+                raise NinebotApiConnectionError(str(err)) from err
 
-    async def _async_raw_request(
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=API_TIMEOUT)
+            except TimeoutError as err:
+                process.kill()
+                await process.communicate()
+                raise NinebotApiConnectionError("ninecli command timed out") from err
+
+        stdout_text = stdout.decode(errors="replace").strip()
+        stderr_text = stderr.decode(errors="replace").strip()
+
+        if process.returncode != 0:
+            raise self._exception_from_cli_failure(process.returncode, stdout_text, stderr_text)
+
+        try:
+            return json.loads(stdout_text or "{}")
+        except ValueError as err:
+            raise NinebotApiConnectionError("Invalid JSON from ninecli") from err
+
+    def _exception_from_cli_failure(
         self,
-        method: str,
-        base_url: str,
-        path: str,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        url = f"{base_url}{path}"
-
-        try:
-            response = await self._session.request(
-                method,
-                url,
-                headers={
-                    "clientId": CLIENT_ID,
-                    "Content-Type": "application/json",
-                },
-                timeout=API_TIMEOUT,
-                **kwargs,
-            )
-            response.raise_for_status()
-        except ClientResponseError as err:
-            if err.status in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
-                raise NinebotApiAuthError from err
-            raise NinebotApiConnectionError from err
-        except ClientError as err:
-            raise NinebotApiConnectionError from err
-
-        try:
-            payload = await response.json(content_type=None)
-        except (ClientError, ValueError) as err:
-            raise NinebotApiConnectionError from err
-
-        if not isinstance(payload, dict):
-            raise NinebotApiConnectionError("Unexpected response payload")
-
-        if "resultCode" in payload:
-            if payload.get("resultCode") == "90000":
-                return payload
-            desc = str(payload.get("resultDesc", ""))
-            raise NinebotApiAuthError(desc or "Authentication failed")
-
-        if payload.get("code") == 1:
-            return payload
-
-        desc = str(payload.get("desc", ""))
-        if self._is_auth_error(desc):
-            raise NinebotApiAuthError(desc or "Authentication failed")
-        raise NinebotApiConnectionError(desc or "Request failed")
-
-    async def _async_set_tokens(self, tokens: NinebotTokens) -> None:
-        previous_tokens = self.tokens
-        self._access_token = tokens.access_token
-        self._refresh_token = tokens.refresh_token
-        self._access_token_validity = tokens.access_token_validity
-
-        if self._token_update_callback is not None and tokens != previous_tokens:
-            await self._token_update_callback(tokens)
-
-    @staticmethod
-    def _is_auth_error(desc: str) -> bool:
-        normalized = desc.lower()
-        return any(
+        returncode: int,
+        stdout: str,
+        stderr: str,
+    ) -> NinebotApiError:
+        message = stderr or stdout or f"ninecli exited with {returncode}"
+        normalized = message.lower()
+        if any(
             marker in normalized
             for marker in (
-                "auth",
-                "token",
-                "unauthorized",
-                "forbidden",
-                "login",
-                "expired",
-                "invalid",
-                "鉴权",
-                "认证",
-                "授权",
-                "令牌",
-                "登录",
-                "失效",
-                "过期",
+                "login first",
+                "business_login auto-fallback failed",
+                "refresh access_token",
+                "invalid username or password",
+                "server code=",
+                "invalid_auth",
             )
+        ):
+            return NinebotApiAuthError(message)
+        return NinebotApiConnectionError(message)
+
+    @staticmethod
+    def _normalize_vehicle(vehicle: dict[str, Any]) -> dict[str, Any] | None:
+        sn = vehicle.get("wnumber") or vehicle.get("sn")
+        if not isinstance(sn, str) or not sn:
+            return None
+        model = vehicle.get("vehicle_name_en") or vehicle.get("vehicle_name") or sn
+        if vehicle_type := vehicle.get("vehicle_type"):
+            model = f"{model} ({vehicle_type})"
+        image_url = vehicle.get("v6_light_img_url") or vehicle.get("img_url")
+        return {
+            "sn": sn,
+            "name": vehicle.get("device_name") or vehicle.get("ble_name") or sn,
+            "model": model,
+            "image_url": image_url if isinstance(image_url, str) and image_url else None,
+            "raw": vehicle,
+        }
+
+    @staticmethod
+    def _normalize_status(status: dict[str, Any]) -> dict[str, Any]:
+        state: dict[str, Any] = {"raw": status}
+
+        if "dump_energy" in status:
+            state["battery"] = _coerce_int(status.get("dump_energy"))
+        if "precise_estimate_mileage" in status:
+            state["endurance"] = _coerce_float(status.get("precise_estimate_mileage"))
+        if "charging" in status:
+            state["charging"] = status.get("charging")
+        if "pwr" in status:
+            state["power"] = status.get("pwr")
+
+        loc = status.get("loc")
+        if isinstance(loc, dict):
+            locked = loc.get("lock")
+            lat = _coerce_float(loc.get("lat"))
+            lon = _coerce_float(loc.get("lon"))
+            if locked is not None:
+                state["lock"] = locked
+            if lat is not None and lon is not None:
+                state["location"] = {"latitude": lat, "longitude": lon}
+        elif "lock_status" in status:
+            state["lock"] = status.get("lock_status")
+
+        return state
+
+    @staticmethod
+    def _normalize_travel(travel: dict[str, Any]) -> dict[str, Any]:
+        rides = travel.get("list")
+        if not isinstance(rides, list):
+            rides = []
+
+        month_mileage = sum(
+            mileage
+            for ride in rides
+            if isinstance(ride, dict)
+            if (mileage := _coerce_float(ride.get("mileages"))) is not None
         )
+        month_energy = sum(
+            energy
+            for ride in rides
+            if isinstance(ride, dict)
+            if (energy := _coerce_float(ride.get("used_electricity"))) is not None
+        )
+        last_ride = rides[0] if rides and isinstance(rides[0], dict) else None
+        last_mileage = (
+            _coerce_float(last_ride.get("mileages"))
+            if last_ride is not None
+            else None
+        )
+        last_energy = (
+            _coerce_float(last_ride.get("used_electricity"))
+            if last_ride is not None
+            else None
+        )
+        return {
+            "month_mileage": month_mileage,
+            "last_mileage": last_mileage,
+            "month_energy": month_energy,
+            "last_energy": last_energy,
+            "last_ride": last_ride,
+        }
+
+
+def _coerce_float(value: Any) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None

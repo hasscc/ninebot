@@ -1,27 +1,24 @@
 from __future__ import annotations
 
+import json
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import (
-    NinebotApiAuthError,
-    NinebotApiClient,
-    NinebotApiConnectionError,
-    NinebotTokens,
-)
+from .api import NinebotApiAuthError, NinebotApiConnectionError, NinebotCliClient
 from .const import (
-    CONF_ACCESS_TOKEN,
-    CONF_ACCESS_TOKEN_VALIDITY,
+    CONF_BUSINESS_UID,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
-    CONF_REFRESH_TOKEN,
     CONF_USERNAME,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
+    NINEBOT_STORAGE_DIR,
 )
 
 
@@ -40,9 +37,28 @@ def _valid_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _derive_title(devices: list[dict[str, Any]]) -> str:
     valid_devices = _valid_devices(devices)
-    if len(valid_devices) == 1 and (device_name := valid_devices[0].get("deviceName")):
+    if len(valid_devices) == 1 and (device_name := valid_devices[0].get("name")):
         return str(device_name)
     return "Ninebot"
+
+
+def _read_business_uid_sync(config_dir: Path) -> str:
+    try:
+        payload = json.loads((config_dir / "tokens.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        raise NinebotApiConnectionError("Missing business_uid") from err
+
+    business_uid = payload.get("business_uid")
+    if not isinstance(business_uid, str) or not business_uid:
+        raise NinebotApiConnectionError("Missing business_uid")
+    return business_uid
+
+
+def _move_config_to_permanent(temp_path: Path, permanent_path: Path) -> None:
+    if permanent_path.exists():
+        shutil.rmtree(permanent_path)
+    permanent_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(temp_path), str(permanent_path))
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -55,22 +71,30 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> OptionsFlow:
         return OptionsFlow(config_entry)
 
+    def _storage_dir(self, business_uid: str) -> Path:
+        return Path(self.hass.config.path(".storage", NINEBOT_STORAGE_DIR, business_uid))
+
     async def _async_validate_credentials(
         self,
         username: str,
         password: str,
-    ) -> tuple[list[dict[str, Any]], NinebotTokens, str, str]:
-        client = NinebotApiClient(
-            async_get_clientsession(self.hass),
-            username=username,
-            password=password,
-        )
-        tokens = await client.async_login()
-        user_uuid = client.user_uuid
-        if user_uuid is None:
-            raise NinebotApiConnectionError("Missing user UUID after login")
-        devices = await client.async_get_device_list()
-        return devices, tokens, user_uuid, _derive_title(devices)
+    ) -> tuple[list[dict[str, Any]], str, str, Path]:
+        temp_path = Path(tempfile.mkdtemp(prefix="ninebot-"))
+        try:
+            client = NinebotCliClient(temp_path)
+            await client.async_login(username, password)
+            devices = await client.async_get_device_list()
+            business_uid = await self.hass.async_add_executor_job(
+                _read_business_uid_sync, temp_path
+            )
+            permanent_path = self._storage_dir(business_uid)
+            await self.hass.async_add_executor_job(
+                _move_config_to_permanent, temp_path, permanent_path
+            )
+        finally:
+            if temp_path.exists():
+                await self.hass.async_add_executor_job(shutil.rmtree, temp_path)
+        return devices, business_uid, _derive_title(devices), permanent_path
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -82,7 +106,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
 
             try:
-                _, tokens, unique_id, title = await self._async_validate_credentials(
+                _, business_uid, title, _ = await self._async_validate_credentials(
                     username,
                     password,
                 )
@@ -93,16 +117,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(unique_id)
+                await self.async_set_unique_id(business_uid)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=title,
                     data={
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
-                        CONF_ACCESS_TOKEN: tokens.access_token,
-                        CONF_REFRESH_TOKEN: tokens.refresh_token,
-                        CONF_ACCESS_TOKEN_VALIDITY: tokens.access_token_validity,
+                        CONF_BUSINESS_UID: business_uid,
                     },
                 )
 
@@ -128,7 +150,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
 
             try:
-                _, tokens, unique_id, _ = await self._async_validate_credentials(
+                _, business_uid, _, _ = await self._async_validate_credentials(
                     username,
                     password,
                 )
@@ -140,16 +162,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 if entry.unique_id is not None:
-                    await self.async_set_unique_id(unique_id)
+                    await self.async_set_unique_id(business_uid)
                     self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
                     entry,
                     data_updates={
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
-                        CONF_ACCESS_TOKEN: tokens.access_token,
-                        CONF_REFRESH_TOKEN: tokens.refresh_token,
-                        CONF_ACCESS_TOKEN_VALIDITY: tokens.access_token_validity,
+                        CONF_BUSINESS_UID: business_uid,
                     },
                 )
 
