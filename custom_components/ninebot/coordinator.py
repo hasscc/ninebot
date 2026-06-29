@@ -63,7 +63,7 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            payloads = await self._client.async_get_all_device_payloads()
+            payloads = await self._async_get_device_payloads()
         except NinebotApiAuthError as err:
             raise ConfigEntryAuthFailed from err
         except NinebotApiConnectionError as err:
@@ -77,6 +77,38 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         merged_devices = {payload["sn"]: payload for payload in payloads}
         return {"devices": merged_devices}
+
+    async def _async_get_device_payloads(self) -> list[dict[str, Any]]:
+        devices = await self._client.async_get_device_list()
+        previous_devices = self._previous_devices
+        results: list[dict[str, Any]] = []
+
+        for device in devices:
+            sn = device.get("sn")
+            if not isinstance(sn, str) or not sn:
+                continue
+
+            try:
+                state = await self._client.async_get_device_state(sn)
+            except NinebotApiConnectionError as err:
+                previous_payload = previous_devices.get(sn)
+                if self._keep_last_data_on_error and isinstance(previous_payload, dict):
+                    LOGGER.warning(
+                        "Keeping previous Ninebot data for %s after update failure: %s",
+                        sn,
+                        err,
+                    )
+                    results.append(previous_payload)
+                    continue
+                raise
+
+            results.append({
+                "sn": sn,
+                "info": device,
+                "state": state,
+            })
+
+        return results
 
     async def _async_update_addresses(self, payloads: list[dict[str, Any]]) -> None:
         for payload in payloads:
@@ -121,6 +153,13 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 self._address_cache[sn] = (latitude, longitude, address)
                 state["address"] = address
+
+    @property
+    def _previous_devices(self) -> dict[str, Any]:
+        if not isinstance(self.data, dict):
+            return {}
+        devices = self.data.get("devices")
+        return devices if isinstance(devices, dict) else {}
 
 
 def _entry_amap_api_key(entry: ConfigEntry) -> str:
