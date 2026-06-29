@@ -24,6 +24,41 @@ def _last_ride_attributes(entity: NinebotEntity) -> dict[str, Any]:
     return last_ride if isinstance(last_ride, dict) else {}
 
 
+def _address_value(entity: NinebotEntity) -> str | None:
+    address = entity.device_state.get("address")
+    if not isinstance(address, dict):
+        return None
+
+    formatted_address = address.get("formatted_address")
+    return formatted_address if isinstance(formatted_address, str) else None
+
+
+def _address_attributes(entity: NinebotEntity) -> dict[str, Any]:
+    address = entity.device_state.get("address")
+    if not isinstance(address, dict):
+        return {}
+
+    return {
+        key: value
+        for key in (
+            "provider",
+            "source_coordinate_system",
+            "coordinate_system",
+            "latitude",
+            "longitude",
+            "amap_latitude",
+            "amap_longitude",
+            "province",
+            "city",
+            "district",
+            "township",
+            "adcode",
+            "error",
+        )
+        if (value := address.get(key)) is not None
+    }
+
+
 @dataclass(frozen=True, kw_only=True)
 class NinebotSensorEntityDescription(SensorEntityDescription):
     value_fn: Callable
@@ -79,6 +114,12 @@ SENSOR_DESCRIPTIONS: tuple[NinebotSensorEntityDescription, ...] = (
         suggested_display_precision=1,
         value_fn=lambda entity: entity.device_state.get("last_energy"),
         attrs_fn=_last_ride_attributes,
+    ),
+    NinebotSensorEntityDescription(
+        key="address",
+        icon="mdi:map-marker",
+        value_fn=_address_value,
+        attrs_fn=_address_attributes,
     ),
 )
 

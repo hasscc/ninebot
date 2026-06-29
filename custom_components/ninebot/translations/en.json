@@ -4,16 +4,22 @@
       "user": {
         "data": {
           "username": "Username",
-          "password": "Password"
+          "password": "Password",
+          "amap_api_key": "AMap Web Service API Key"
         },
         "data_description": {
-          "username": "Username / Phone / Email"
+          "username": "Username / Phone / Email",
+          "amap_api_key": "Optional. When set, the integration creates an address entity using AMap reverse geocoding."
         }
       },
       "reconfigure": {
         "data": {
           "username": "Username",
-          "password": "Password"
+          "password": "Password",
+          "amap_api_key": "AMap Web Service API Key"
+        },
+        "data_description": {
+          "amap_api_key": "Optional. Clear this field to stop querying AMap addresses."
         }
       }
     },
@@ -30,7 +36,11 @@
     "step": {
       "init": {
         "data": {
-          "poll_interval": "Polling interval (seconds)"
+          "poll_interval": "Polling interval (seconds)",
+          "amap_api_key": "AMap Web Service API Key"
+        },
+        "data_description": {
+          "amap_api_key": "Optional. When set, the integration creates an address entity using AMap reverse geocoding."
         }
       }
     }
@@ -54,6 +64,9 @@
       },
       "last_energy": {
         "name": "Last energy"
+      },
+      "address": {
+        "name": "Address"
       }
     },
     "binary_sensor": {

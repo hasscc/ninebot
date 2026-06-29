@@ -4,16 +4,22 @@
       "user": {
         "data": {
           "username": "账号",
-          "password": "密码"
+          "password": "密码",
+          "amap_api_key": "高德 Web 服务 API Key"
         },
         "data_description": {
-          "username": "用户名 / 手机 / 邮箱"
+          "username": "用户名 / 手机 / 邮箱",
+          "amap_api_key": "可选。填写后会创建地址实体，并使用车辆坐标调用高德逆地理编码。"
         }
       },
       "reconfigure": {
         "data": {
           "username": "账号",
-          "password": "密码"
+          "password": "密码",
+          "amap_api_key": "高德 Web 服务 API Key"
+        },
+        "data_description": {
+          "amap_api_key": "可选。清空后停止查询高德地址。"
         }
       }
     },
@@ -30,7 +36,11 @@
     "step": {
       "init": {
         "data": {
-          "poll_interval": "轮询间隔(秒)"
+          "poll_interval": "轮询间隔(秒)",
+          "amap_api_key": "高德 Web 服务 API Key"
+        },
+        "data_description": {
+          "amap_api_key": "可选。填写后会创建地址实体，并使用车辆坐标调用高德逆地理编码。"
         }
       }
     }
@@ -54,6 +64,9 @@
       },
       "last_energy": {
         "name": "最后耗电"
+      },
+      "address": {
+        "name": "地址"
       }
     },
     "binary_sensor": {
