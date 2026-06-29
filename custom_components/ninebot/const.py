@@ -5,6 +5,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_BUSINESS_UID = "business_uid"
 CONF_AMAP_API_KEY = "amap_api_key"
+CONF_KEEP_LAST_DATA_ON_ERROR = "keep_last_data_on_error"
 CONF_POLL_INTERVAL = "poll_interval"
 DEFAULT_POLL_INTERVAL = 120
 API_TIMEOUT = 30

@@ -37,10 +37,12 @@
       "init": {
         "data": {
           "poll_interval": "Polling interval (seconds)",
-          "amap_api_key": "AMap Web Service API Key"
+          "amap_api_key": "AMap Web Service API Key",
+          "keep_last_data_on_error": "Keep last data when updates fail"
         },
         "data_description": {
-          "amap_api_key": "Optional. When set, the integration creates an address entity using AMap reverse geocoding."
+          "amap_api_key": "Optional. When set, the integration creates an address entity using AMap reverse geocoding.",
+          "keep_last_data_on_error": "Optional. When enabled, entities keep the last successful data if the Ninebot API update fails because of network or service errors. Authentication failures still trigger re-authentication."
         }
       }
     }

@@ -11,7 +11,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import NinebotApiAuthError, NinebotApiConnectionError, NinebotCliClient
-from .const import CONF_AMAP_API_KEY, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN
+from .const import (
+    CONF_AMAP_API_KEY,
+    CONF_KEEP_LAST_DATA_ON_ERROR,
+    CONF_POLL_INTERVAL,
+    DEFAULT_POLL_INTERVAL,
+    DOMAIN,
+)
 from .geocode import (
     AMAP_CACHE_DISTANCE_METERS,
     AmapGeocodeError,
@@ -36,6 +42,9 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.config_entry = entry
         self._client = client
         self._address_cache: dict[str, tuple[float, float, dict[str, Any]]] = {}
+        self._keep_last_data_on_error = bool(
+            entry.options.get(CONF_KEEP_LAST_DATA_ON_ERROR, False)
+        )
         amap_api_key = _entry_amap_api_key(entry)
         self._amap_geocoder = (
             AmapReverseGeocoder(async_get_clientsession(hass), amap_api_key)
@@ -58,6 +67,9 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except NinebotApiAuthError as err:
             raise ConfigEntryAuthFailed from err
         except NinebotApiConnectionError as err:
+            if self._keep_last_data_on_error and self.data:
+                LOGGER.warning("Keeping previous Ninebot data after update failure: %s", err)
+                return self.data
             raise UpdateFailed(str(err) or "Failed to fetch Ninebot data") from err
 
         if self._amap_geocoder is not None:
@@ -104,12 +116,8 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
             except AmapGeocodeError as err:
                 LOGGER.debug("Failed to reverse geocode Ninebot location for %s: %s", sn, err)
-                state["address"] = {
-                    "error": str(err),
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "provider": "amap",
-                }
+                if cached is not None:
+                    state["address"] = cached[2]
             else:
                 self._address_cache[sn] = (latitude, longitude, address)
                 state["address"] = address

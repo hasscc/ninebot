@@ -37,10 +37,12 @@
       "init": {
         "data": {
           "poll_interval": "轮询间隔(秒)",
-          "amap_api_key": "高德 Web 服务 API Key"
+          "amap_api_key": "高德 Web 服务 API Key",
+          "keep_last_data_on_error": "更新失败时保留上次数据"
         },
         "data_description": {
-          "amap_api_key": "可选。填写后会创建地址实体，并使用车辆坐标调用高德逆地理编码。"
+          "amap_api_key": "可选。填写后会创建地址实体，并使用车辆坐标调用高德逆地理编码。",
+          "keep_last_data_on_error": "可选。开启后，九号接口因网络或服务异常刷新失败时，实体会继续显示上一次成功更新的数据。认证失败仍会触发重新认证。"
         }
       }
     }
