@@ -77,13 +77,26 @@
     },
     "binary_sensor": {
       "charging": {
-        "name": "充电中"
+        "name": "充电状态"
       },
       "power": {
-        "name": "已开机"
+        "name": "电源状态"
       },
       "lock": {
         "name": "锁定状态"
+      }
+    },
+    "button": {
+      "bell": {
+        "name": "闪灯鸣笛"
+      },
+      "bucket": {
+        "name": "打开座桶"
+      }
+    },
+    "lock": {
+      "lock": {
+        "name": "车锁"
       }
     },
     "device_tracker": {

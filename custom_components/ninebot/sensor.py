@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength
+from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfLength
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -59,6 +59,16 @@ def _address_attributes(entity: NinebotEntity) -> dict[str, Any]:
     }
 
 
+def _month_energy_attributes(entity: NinebotEntity) -> dict[str, Any]:
+    used_electricity = entity.device_state.get("month_used_electricity")
+    return {"used_electricity": used_electricity} if used_electricity is not None else {}
+
+
+def _last_energy_attributes(entity: NinebotEntity) -> dict[str, Any]:
+    used_electricity = entity.device_state.get("last_used_electricity")
+    return {"used_electricity": used_electricity} if used_electricity is not None else {}
+
+
 @dataclass(frozen=True, kw_only=True)
 class NinebotSensorEntityDescription(SensorEntityDescription):
     value_fn: Callable
@@ -100,20 +110,23 @@ SENSOR_DESCRIPTIONS: tuple[NinebotSensorEntityDescription, ...] = (
     ),
     NinebotSensorEntityDescription(
         key="month_energy",
+        device_class=SensorDeviceClass.ENERGY,
         icon="mdi:flash",
-        native_unit_of_measurement=PERCENTAGE,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=1,
         value_fn=lambda entity: entity.device_state.get("month_energy"),
+        attrs_fn=_month_energy_attributes,
     ),
     NinebotSensorEntityDescription(
         key="last_energy",
+        device_class=SensorDeviceClass.ENERGY,
         icon="mdi:flash",
-        native_unit_of_measurement=PERCENTAGE,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda entity: entity.device_state.get("last_energy"),
-        attrs_fn=_last_ride_attributes,
+        attrs_fn=_last_energy_attributes,
     ),
     NinebotSensorEntityDescription(
         key="address",

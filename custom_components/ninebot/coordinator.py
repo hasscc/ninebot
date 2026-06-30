@@ -130,10 +130,9 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return results
 
     async def _async_get_device_state(self, sn: str) -> dict[str, Any]:
-        status = await self._client.async_get_device_status(sn)
+        state = await self._client.async_get_device_status(sn)
         await self._async_request_delay()
 
-        state = self._client.normalize_status(status)
         try:
             travel = await self._client.async_get_device_travel(sn)
         except NinebotApiConnectionError as err:
@@ -194,6 +193,59 @@ class NinebotDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 self._address_cache[sn] = (latitude, longitude, address)
                 state["address"] = address
+
+    async def async_request_device_status_refresh(self, sn: str) -> None:
+        try:
+            status = await self._client.async_get_device_status(sn)
+        except NinebotApiAuthError as err:
+            raise ConfigEntryAuthFailed from err
+        except NinebotApiConnectionError as err:
+            raise UpdateFailed(str(err) or "Failed to fetch Ninebot status") from err
+
+        data = self.data or {"devices": {}}
+        devices = data.get("devices", {})
+        if not isinstance(devices, dict):
+            return
+
+        device = devices.get(sn)
+        if not isinstance(device, dict):
+            return
+
+        current_state = device.get("state", {})
+        if not isinstance(current_state, dict):
+            current_state = {}
+
+        preserved_state = {
+            key: value
+            for key, value in current_state.items()
+            if key.startswith("month_") or key.startswith("last_") or key == "address"
+        }
+        updated_state = {**preserved_state, **status}
+        if self._amap_geocoder is not None:
+            payload = {"sn": sn, "state": updated_state}
+            await self._async_update_addresses([payload])
+            updated_state = payload["state"]
+
+        current_visible_state = {
+            key: value for key, value in current_state.items() if key != "raw"
+        }
+        updated_visible_state = {
+            key: value for key, value in updated_state.items() if key != "raw"
+        }
+        if updated_visible_state == current_visible_state:
+            return
+
+        updated_device = {
+            **device,
+            "state": updated_state,
+        }
+        self.async_set_updated_data({
+            **data,
+            "devices": {
+                **devices,
+                sn: updated_device,
+            },
+        })
 
     @property
     def _previous_devices(self) -> dict[str, Any]:

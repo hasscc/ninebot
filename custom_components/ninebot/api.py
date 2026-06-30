@@ -51,12 +51,15 @@ class NinebotCliClient:
             if (normalized := self._normalize_vehicle(vehicle)) is not None
         ]
 
-    async def async_get_device_state(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
-        status = await self.async_get_device_status(sn)
+    async def async_get_device_status(self, sn: str) -> dict[str, Any]:
+        status = await self._async_run_json_command(["status", sn, "--json"])
         if not isinstance(status, dict):
             status = {}
+        return self.normalize_status(status)
 
-        state = self.normalize_status(status)
+    async def async_get_device_state(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
+        month = month or datetime.now(UTC).strftime("%Y%m")
+        state = await self.async_get_device_status(sn)
         try:
             travel = await self.async_get_device_travel(sn, month=month)
         except NinebotApiConnectionError as err:
@@ -65,10 +68,6 @@ class NinebotCliClient:
             if isinstance(travel, dict):
                 state.update(self.normalize_travel(travel))
         return state
-
-    async def async_get_device_status(self, sn: str) -> dict[str, Any]:
-        payload = await self._async_run_json_command(["status", sn, "--json"])
-        return payload if isinstance(payload, dict) else {}
 
     async def async_get_device_travel(self, sn: str, *, month: str | None = None) -> dict[str, Any]:
         month = month or datetime.now(UTC).strftime("%Y%m")
@@ -92,6 +91,22 @@ class NinebotCliClient:
                     "state": state,
                 })
             return results
+
+    async def async_bell(self, sn: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(["bell", sn, "--json"])
+        return payload if isinstance(payload, dict) else {}
+
+    async def async_open_bucket(self, sn: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(["buck", sn, "--yes", "--json"])
+        return payload if isinstance(payload, dict) else {}
+
+    async def async_lock(self, sn: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(["engine-stop", sn, "--yes", "--json"])
+        return payload if isinstance(payload, dict) else {}
+
+    async def async_unlock(self, sn: str) -> dict[str, Any]:
+        payload = await self._async_run_json_command(["engine-start", sn, "--yes", "--json"])
+        return payload if isinstance(payload, dict) else {}
 
     async def _async_run_json_command(self, args: list[str]) -> Any:
         command = [
@@ -189,7 +204,7 @@ class NinebotCliClient:
             lon = _coerce_float(loc.get("lon"))
             accuracy = _coerce_float(loc.get("acc"))
             if locked is not None:
-                state["lock"] = locked
+                state["lock"] = _coerce_int(locked)
             if lat is not None and lon is not None:
                 location = {"latitude": lat, "longitude": lon}
                 if accuracy is not None:
@@ -206,18 +221,9 @@ class NinebotCliClient:
         if not isinstance(rides, list):
             rides = []
 
-        month_mileage = sum(
-            mileage
-            for ride in rides
-            if isinstance(ride, dict)
-            if (mileage := _coerce_float(ride.get("mileages"))) is not None
-        )
-        month_energy = sum(
-            energy
-            for ride in rides
-            if isinstance(ride, dict)
-            if (energy := _coerce_float(ride.get("used_electricity"))) is not None
-        )
+        month_mileage = _coerce_float(travel.get("total_mileages"))
+        month_energy = _coerce_float(travel.get("ec"))
+        month_used_electricity = _coerce_float(travel.get("used_electricity"))
         last_ride = rides[0] if rides and isinstance(rides[0], dict) else None
         last_mileage = (
             _coerce_float(last_ride.get("mileages"))
@@ -225,17 +231,28 @@ class NinebotCliClient:
             else None
         )
         last_energy = (
+            _coerce_float(last_ride.get("ec"))
+            if last_ride is not None
+            else None
+        )
+        last_used_electricity = (
             _coerce_float(last_ride.get("used_electricity"))
             if last_ride is not None
             else None
         )
-        return {
-            "month_mileage": month_mileage,
+        state = {
             "last_mileage": last_mileage,
-            "month_energy": month_energy,
             "last_energy": last_energy,
+            "last_used_electricity": last_used_electricity,
             "last_ride": last_ride,
         }
+        if month_mileage is not None:
+            state["month_mileage"] = month_mileage
+        if month_energy is not None:
+            state["month_energy"] = month_energy
+        if month_used_electricity is not None:
+            state["month_used_electricity"] = month_used_electricity
+        return state
 
 
 def _coerce_float(value: Any) -> float | None:
