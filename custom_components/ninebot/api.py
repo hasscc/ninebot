@@ -197,10 +197,14 @@ class NinebotCliClient:
             locked = loc.get("lock")
             lat = _coerce_float(loc.get("lat"))
             lon = _coerce_float(loc.get("lon"))
+            accuracy = _coerce_float(loc.get("acc"))
             if locked is not None:
                 state["lock"] = _coerce_int(locked)
             if lat is not None and lon is not None:
-                state["location"] = {"latitude": lat, "longitude": lon}
+                location = {"latitude": lat, "longitude": lon}
+                if accuracy is not None:
+                    location["accuracy"] = accuracy
+                state["location"] = location
         elif "lock_status" in status:
             state["lock"] = status.get("lock_status")
 

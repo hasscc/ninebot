@@ -57,22 +57,27 @@ class NinebotDeviceTracker(NinebotEntity, TrackerEntity):
         picture = self.device_profile.get("image_url")
         return picture if isinstance(picture, str) and picture else None
 
+    @callback
+    def _on_updated(self) -> None:
+        """Handle updated data."""
+        self._attr_latitude = None
+        self._attr_longitude = None
+        self._attr_location_accuracy = None
+
+        location = self.device_state.get("location")
+        if not isinstance(location, dict):
+            return
+
+        latitude = location.get("latitude")
+        longitude = location.get("longitude")
+        if isinstance(latitude, int | float) and isinstance(longitude, int | float):
+            self._attr_latitude = latitude
+            self._attr_longitude = longitude
+
+        accuracy = location.get("accuracy")
+        if isinstance(accuracy, int | float):
+            self._attr_location_accuracy = accuracy
+
     @property
     def available(self) -> bool:
         return super().available and self.latitude is not None and self.longitude is not None
-
-    @property
-    def latitude(self) -> float | None:
-        location = self.device_state.get("location")
-        if not isinstance(location, dict):
-            return None
-        latitude = location.get("latitude")
-        return latitude if isinstance(latitude, int | float) else None
-
-    @property
-    def longitude(self) -> float | None:
-        location = self.device_state.get("location")
-        if not isinstance(location, dict):
-            return None
-        longitude = location.get("longitude")
-        return longitude if isinstance(longitude, int | float) else None
