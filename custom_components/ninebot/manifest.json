@@ -7,6 +7,6 @@
   "integration_type": "device",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/hasscc/ninebot/issues",
-  "requirements": ["ninecli==0.1.4"],
+  "requirements": ["ninecli==0.1.6"],
   "version": "0.2.0b0"
 }

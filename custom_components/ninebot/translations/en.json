@@ -61,10 +61,23 @@
         "name": "Charging"
       },
       "power": {
-        "name": "Power"
+        "name": "Power status"
       },
       "lock": {
         "name": "Lock status"
+      }
+    },
+    "button": {
+      "bell": {
+        "name": "Bell"
+      },
+      "bucket": {
+        "name": "Open bucket"
+      }
+    },
+    "lock": {
+      "lock": {
+        "name": "Lock"
       }
     },
     "device_tracker": {
