@@ -30,7 +30,15 @@
     "step": {
       "init": {
         "data": {
-          "poll_interval": "轮询间隔(秒)"
+          "poll_interval": "轮询间隔(秒)",
+          "keep_last_data_on_error": "更新失败时保留上次数据",
+          "request_delay": "请求间隔(秒)",
+          "device_delay": "设备间隔(秒)"
+        },
+        "data_description": {
+          "keep_last_data_on_error": "可选。开启后，九号接口因网络或服务异常刷新失败时，实体会继续显示上一次成功更新的数据。认证失败仍会触发重新认证。",
+          "request_delay": "每个九号接口请求之间等待的秒数。默认 0 秒，保持原行为。",
+          "device_delay": "不同车辆之间等待的秒数。默认 0 秒，保持原行为。"
         }
       }
     }
